@@ -11,12 +11,20 @@ from src.constants import (
 )
 
 
+def _sanitize_url(raw_url: str) -> str:
+    """Removes accidental markdown link artifacts from url."""
+    target = raw_url.strip()
+    if target.startswith("[") and "](" in target:
+        target = target.split("](")[1].rstrip(")")
+    return target.rstrip("/")
+
+
 class ApiClient:
     """Client communicating with the BaseHTTPRequestHandler service."""
 
     def __init__(self, base_url: str):
         """Initializes client with host url."""
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _sanitize_url(base_url)
         self.headers = {
             HEADER_CONTENT_TYPE: MEDIA_JSON,
             HEADER_ACCEPT: MEDIA_JSON,

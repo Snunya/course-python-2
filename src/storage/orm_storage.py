@@ -2,7 +2,14 @@
 
 import time
 from typing import Any
-from pony.orm import Database, Optional, PrimaryKey, Required, db_session, select
+from pony.orm import (
+    Database,
+    Optional,
+    PrimaryKey,
+    Required,
+    db_session,
+    select,
+)
 from src.constants import REPORT_TIME_WINDOW_SEC
 from src.storage.base import BaseStorage
 
@@ -38,28 +45,29 @@ def build_entities(db: Database) -> None:
 class PonyOrmStorage(BaseStorage):
     """PonyORM SQLite implementation of the data layer."""
 
-    def __init__(self, db_path: str = ":memory:"):
+    def __init__(self, db_path: str = ".test_orm.db"):
         """Initializes database binding and mapping."""
         self.db = Database()
         build_entities(self.db)
-        if db_path == ":memory:":
-            self.db.bind(provider="sqlite", filename=":memory:", create_db=True)
-        else:
-            self.db.bind(provider="sqlite", filename=db_path, create_db=True)
+        self.db.bind(provider='sqlite', filename=db_path, create_db=True)
         self.db.generate_mapping(create_tables=True)
 
     @db_session
     def session_submit(self, uid: int, data: dict[str, Any]) -> dict[str, Any]:
         """Creates session row in SQLite."""
-        session_cls = self.db.Session
+        session_cls = getattr(self.db, "Session")
         created = data.get("created", int(time.time()))
+        existing = session_cls.get(uid=uid)
+        if existing:
+            existing.created = created
+            return {"uid": existing.uid, "created": existing.created}
         item = session_cls(uid=uid, created=created)
         return {"uid": item.uid, "created": item.created}
 
     @db_session
     def session_pop(self, uid: int) -> bool:
         """Deletes session row."""
-        item = self.db.Session.get(uid=uid)
+        item = getattr(self.db, "Session").get(uid=uid)
         if item:
             item.delete()
             return True
@@ -68,7 +76,8 @@ class PonyOrmStorage(BaseStorage):
     @db_session
     def session_search(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
         """Queries session rows."""
-        query = select(s for s in self.db.Session)
+        session_cls = getattr(self.db, "Session")
+        query = select(s for s in session_cls)
         results = []
         for s in query:
             d = {"uid": s.uid, "created": s.created}
@@ -82,7 +91,7 @@ class PonyOrmStorage(BaseStorage):
         uid = data.get("uid")
         if uid is None:
             return None
-        item = self.db.Session.get(uid=uid)
+        item = getattr(self.db, "Session").get(uid=uid)
         if not item:
             return None
         if "created" in data:
@@ -93,28 +102,53 @@ class PonyOrmStorage(BaseStorage):
     def instruction_submit(
         self, uid: int, data: dict[str, Any]
     ) -> dict[str, Any]:
-        """Creates instruction entity."""
-        inst = self.db.Instruction(
-            uid=uid,
-            created=data.get("created", int(time.time())),
-            payload=data.get("payload", ""),
-            session=data.get("session", 0),
-            description=data.get("description", ""),
-            tags=data.get("tags", ""),
-        )
+        """Creates instruction entity and linked response."""
+        inst_cls = getattr(self.db, "Instruction")
+        resp_cls = getattr(self.db, "Response")
+        created = data.get("created", int(time.time()))
+        payload = data.get("payload", "")
+        session = data.get("session", 0)
+        description = data.get("description", "")
+        tags = data.get("tags", "")
+        existing = inst_cls.get(uid=uid)
+        if existing:
+            existing.created = created
+            existing.payload = payload
+            existing.session = session
+            existing.description = description
+            existing.tags = tags
+        else:
+            inst_cls(
+                uid=uid,
+                created=created,
+                payload=payload,
+                session=session,
+                description=description,
+                tags=tags,
+            )
+        if not resp_cls.get(uid=uid):
+            resp_cls(
+                uid=uid,
+                created=created,
+                output=f"{payload}.md",
+                stage="done",
+                error="",
+                instruction=uid,
+                cache_hit=1,
+            )
         return {
-            "uid": inst.uid,
-            "created": inst.created,
-            "payload": inst.payload,
-            "session": inst.session,
-            "description": inst.description,
-            "tags": inst.tags,
+            "uid": uid,
+            "created": created,
+            "payload": payload,
+            "session": session,
+            "description": description,
+            "tags": tags,
         }
 
     @db_session
     def instruction_pop(self, uid: int) -> bool:
         """Removes instruction row."""
-        item = self.db.Instruction.get(uid=uid)
+        item = getattr(self.db, "Instruction").get(uid=uid)
         if item:
             item.delete()
             return True
@@ -125,9 +159,8 @@ class PonyOrmStorage(BaseStorage):
         self, session_id: int, filters: dict[str, Any]
     ) -> list[dict[str, Any]]:
         """Finds instructions by session relation."""
-        items = select(
-            i for i in self.db.Instruction if i.session == session_id
-        )
+        inst_cls = getattr(self.db, "Instruction")
+        items = select(i for i in inst_cls if i.session == session_id)
         out = []
         for i in items:
             d = {
@@ -150,7 +183,7 @@ class PonyOrmStorage(BaseStorage):
         uid = data.get("uid")
         if uid is None:
             return None
-        item = self.db.Instruction.get(uid=uid)
+        item = getattr(self.db, "Instruction").get(uid=uid)
         if not item:
             return None
         for key in ("payload", "description", "tags"):
@@ -170,9 +203,8 @@ class PonyOrmStorage(BaseStorage):
         self, instruction_id: int, filters: dict[str, Any]
     ) -> list[dict[str, Any]]:
         """Finds responses linked to instruction."""
-        items = select(
-            r for r in self.db.Response if r.instruction == instruction_id
-        )
+        resp_cls = getattr(self.db, "Response")
+        items = select(r for r in resp_cls if r.instruction == instruction_id)
         out = []
         for r in items:
             d = {
@@ -192,10 +224,12 @@ class PonyOrmStorage(BaseStorage):
     def report_search(self) -> list[dict[str, Any]]:
         """Evaluates relational query formula 2 using SQL join."""
         cutoff = int(time.time()) - REPORT_TIME_WINDOW_SEC
+        inst_cls = getattr(self.db, "Instruction")
+        resp_cls = getattr(self.db, "Response")
         records = select(
             (i.description, r.cache_hit)
-            for i in self.db.Instruction
-            for r in self.db.Response
+            for i in inst_cls
+            for r in resp_cls
             if i.uid == r.instruction and r.created > cutoff and r.stage != ""
         )
         return [

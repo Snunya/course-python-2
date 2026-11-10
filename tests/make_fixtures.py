@@ -4,7 +4,12 @@ import os
 import docx
 
 
-def create_sample_docx(path: str, title: str, paragraphs: list, table_data=None):
+def create_sample_docx(
+    path: str,
+    title: str,
+    paragraphs: list,
+    table_data=None,
+):
     """Creates a sample docx document programmatically."""
     doc = docx.Document()
     doc.add_heading(title, level=1)

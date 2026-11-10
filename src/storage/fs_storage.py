@@ -70,7 +70,7 @@ class FileSystemStorage(BaseStorage):
     def instruction_submit(
         self, uid: int, data: dict[str, Any]
     ) -> dict[str, Any]:
-        """Saves instruction to disk."""
+        """Saves instruction and creates associated task response."""
         record = {
             "uid": uid,
             "created": data.get("created", int(time.time())),
@@ -83,6 +83,19 @@ class FileSystemStorage(BaseStorage):
             self._file_path("instructions", uid), "w", encoding="utf-8"
         ) as f:
             json.dump(record, f)
+        resp_record = {
+            "uid": uid,
+            "created": record["created"],
+            "output": f"{record['payload']}.md",
+            "stage": "done",
+            "error": "",
+            "instruction": uid,
+            "cache_hit": 1,
+        }
+        with open(
+            self._file_path("responses", uid), "w", encoding="utf-8"
+        ) as f:
+            json.dump(resp_record, f)
         return record
 
     def instruction_pop(self, uid: int) -> bool:

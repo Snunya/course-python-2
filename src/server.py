@@ -12,6 +12,7 @@ from src.constants import (
     LANG_EN,
     MEDIA_JSON,
     STATUS_NOT_ACCEPTABLE,
+    STATUS_NOT_FOUND,
     STATUS_OK,
     STATUS_UNSUPPORTED_MEDIA,
 )
@@ -65,32 +66,26 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path_parts = parsed.path.strip("/").split("/")
 
-        if len(path_parts) == 5 and path_parts[:4] == [
-            "rest",
-            "api",
-            "v1.0",
-            "session",
+        if len(path_parts) == 6 and path_parts[:5] == [
+            "rest", "api", "v1.0", "session", "submit"
         ]:
-            uid = int(path_parts[4])
+            uid = int(path_parts[5])
             data = self._read_body_json()
             res = self.storage.session_submit(uid, data)
             self._send_json(STATUS_OK, res)
             return
 
-        if len(path_parts) == 5 and path_parts[:4] == [
-            "rest",
-            "api",
-            "v1.0",
-            "instruction",
+        if len(path_parts) == 6 and path_parts[:5] == [
+            "rest", "api", "v1.0", "instruction", "submit"
         ]:
-            uid = int(path_parts[4])
+            uid = int(path_parts[5])
             data = self._read_body_json()
             res = self.storage.instruction_submit(uid, data)
             self._execute_cli_task(uid, data)
             self._send_json(STATUS_OK, res)
             return
 
-        self._send_json(404, {"error": "Not found"})
+        self._send_json(STATUS_NOT_FOUND, {"error": "Not found"})
 
     def do_DELETE(self) -> None:
         """Handles DELETE API endpoints."""
@@ -102,19 +97,23 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path_parts = parsed.path.strip("/").split("/")
 
-        if len(path_parts) == 5 and path_parts[3] == "session":
-            uid = int(path_parts[4])
+        if len(path_parts) == 6 and path_parts[:5] == [
+            "rest", "api", "v1.0", "session", "pop"
+        ]:
+            uid = int(path_parts[5])
             ok = self.storage.session_pop(uid)
             self._send_json(STATUS_OK, {"deleted": ok})
             return
 
-        if len(path_parts) == 5 and path_parts[3] == "instruction":
-            uid = int(path_parts[4])
+        if len(path_parts) == 6 and path_parts[:5] == [
+            "rest", "api", "v1.0", "instruction", "pop"
+        ]:
+            uid = int(path_parts[5])
             ok = self.storage.instruction_pop(uid)
             self._send_json(STATUS_OK, {"deleted": ok})
             return
 
-        self._send_json(404, {"error": "Not found"})
+        self._send_json(STATUS_NOT_FOUND, {"error": "Not found"})
 
     def do_GET(self) -> None:
         """Handles GET API endpoints."""
@@ -135,19 +134,23 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             self._send_json(STATUS_OK, self.storage.report_search())
             return
 
-        if len(path_parts) == 5 and path_parts[3] == "instruction":
-            session_id = int(path_parts[4])
+        if len(path_parts) == 6 and path_parts[:5] == [
+            "rest", "api", "v1.0", "instruction", "search"
+        ]:
+            session_id = int(path_parts[5])
             res = self.storage.instruction_search(session_id, query)
             self._send_json(STATUS_OK, res)
             return
 
-        if len(path_parts) == 5 and path_parts[3] == "response":
-            inst_id = int(path_parts[4])
+        if len(path_parts) == 6 and path_parts[:5] == [
+            "rest", "api", "v1.0", "response", "search"
+        ]:
+            inst_id = int(path_parts[5])
             res = self.storage.response_search(inst_id, query)
             self._send_json(STATUS_OK, res)
             return
 
-        self._send_json(404, {"error": "Not found"})
+        self._send_json(STATUS_NOT_FOUND, {"error": "Not found"})
 
     def do_POST(self) -> None:
         """Handles POST API endpoints."""
@@ -169,7 +172,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             self._send_json(STATUS_OK, res or {})
             return
 
-        self._send_json(404, {"error": "Not found"})
+        self._send_json(STATUS_NOT_FOUND, {"error": "Not found"})
 
     def _execute_cli_task(self, uid: int, data: dict) -> None:
         """Executes CLI converter via subprocess or skips in test mode."""
