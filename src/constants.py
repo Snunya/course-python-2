@@ -1,0 +1,22 @@
+"""Application constants and configuration limits."""
+
+STATUS_OK = 200
+STATUS_NOT_ACCEPTABLE = 406
+STATUS_UNSUPPORTED_MEDIA = 415
+
+REPORT_TIME_WINDOW_SEC = 360
+MAX_OUTPUT_PREVIEW_LEN = 500
+
+HEADER_CONTENT_TYPE = "Content-Type"
+HEADER_ACCEPT = "Accept"
+HEADER_LANGUAGE = "Accept-Language"
+
+MEDIA_JSON = "application/json"
+LANG_EN = "en"
+
+STAGE_QUEUED = "queued"
+STAGE_DONE = "done"
+STAGE_ERROR = "error"
+
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8080
