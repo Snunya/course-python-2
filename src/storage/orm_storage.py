@@ -49,7 +49,7 @@ class PonyOrmStorage(BaseStorage):
         """Initializes database binding and mapping."""
         self.db = Database()
         build_entities(self.db)
-        self.db.bind(provider='sqlite', filename=db_path, create_db=True)
+        self.db.bind(provider="sqlite", filename=db_path, create_db=True)
         self.db.generate_mapping(create_tables=True)
 
     @db_session
@@ -98,34 +98,30 @@ class PonyOrmStorage(BaseStorage):
             item.created = data["created"]
         return {"uid": item.uid, "created": item.created}
 
-    @db_session
-    def instruction_submit(
-        self, uid: int, data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Creates instruction entity and linked response."""
+    def _save_instruction(
+        self, uid: int, data: dict[str, Any], created: int
+    ) -> None:
+        """Saves or updates instruction entity."""
         inst_cls = getattr(self.db, "Instruction")
-        resp_cls = getattr(self.db, "Response")
-        created = data.get("created", int(time.time()))
-        payload = data.get("payload", "")
-        session = data.get("session", 0)
-        description = data.get("description", "")
-        tags = data.get("tags", "")
+        attrs = {
+            "created": created,
+            "payload": data.get("payload", ""),
+            "session": data.get("session", 0),
+            "description": data.get("description", ""),
+            "tags": data.get("tags", ""),
+        }
         existing = inst_cls.get(uid=uid)
         if existing:
-            existing.created = created
-            existing.payload = payload
-            existing.session = session
-            existing.description = description
-            existing.tags = tags
+            for key, val in attrs.items():
+                setattr(existing, key, val)
         else:
-            inst_cls(
-                uid=uid,
-                created=created,
-                payload=payload,
-                session=session,
-                description=description,
-                tags=tags,
-            )
+            inst_cls(uid=uid, **attrs)
+
+    def _ensure_response(
+        self, uid: int, created: int, payload: str
+    ) -> None:
+        """Ensures corresponding response entity exists."""
+        resp_cls = getattr(self.db, "Response")
         if not resp_cls.get(uid=uid):
             resp_cls(
                 uid=uid,
@@ -136,13 +132,23 @@ class PonyOrmStorage(BaseStorage):
                 instruction=uid,
                 cache_hit=1,
             )
+
+    @db_session
+    def instruction_submit(
+        self, uid: int, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Creates instruction entity and linked response."""
+        created = data.get("created", int(time.time()))
+        payload = data.get("payload", "")
+        self._save_instruction(uid, data, created)
+        self._ensure_response(uid, created, payload)
         return {
             "uid": uid,
             "created": created,
             "payload": payload,
-            "session": session,
-            "description": description,
-            "tags": tags,
+            "session": data.get("session", 0),
+            "description": data.get("description", ""),
+            "tags": data.get("tags", ""),
         }
 
     @db_session
